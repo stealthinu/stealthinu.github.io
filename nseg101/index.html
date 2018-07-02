@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="generator" content="pandoc">
+  <title></title>
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, minimal-ui">
+  <link rel="stylesheet" href="reveal.js/css/reveal.css">
+  <style type="text/css">code{white-space: pre;}</style>
+  <link rel="stylesheet" href="reveal.js/css/theme/black.css" id="theme">
+  <!-- Printing and PDF exports -->
+  <script>
+    var link = document.createElement( 'link' );
+    link.rel = 'stylesheet';
+    link.type = 'text/css';
+    link.href = window.location.search.match( /print-pdf/gi ) ? 'reveal.js/css/print/pdf.css' : 'reveal.js/css/print/paper.css';
+    document.getElementsByTagName( 'head' )[0].appendChild( link );
+  </script>
+  <!--[if lt IE 9]>
+  <script src="reveal.js/lib/js/html5shiv.js"></script>
+  <![endif]-->
+</head>
+<body>
+  <div class="reveal">
+    <div class="slides">
+
+
+<section id="スパム対策お焚き上げ" class="slide level1 font-outline" data-background = "hakuba.jpg">
+<h1><span class="font-outline">スパム対策お焚き上げ</span></h1>
+<ul style="list-style:none;">
+<li>NSEG #101</li>
+<li>2018/6/30</li>
+<li>さとうきよし</li>
+<li><span class="citation" data-cites="stealthinu">@stealthinu</span></li>
+</ul>
+</section>
+<section id="自己紹介" class="slide level1">
+<h1>自己紹介</h1>
+<ul>
+<li>有限会社ジーワークス</li>
+<li>長野県白馬村</li>
+<li>スキーしたかったから移住</li>
+<li>17年くらい地方中規模ISP様の常駐仕事</li>
+</ul>
+</section>
+<section id="どんな話" class="slide level1">
+<h1>どんな話？</h1>
+<ul>
+<li>題名は以前の@t_wada氏の発表<br><a href="https://nseg.connpass.com/event/73807/">SQLアンチパターンのお焚き上げ</a>パクり</li>
+<li>以前自分が考案したスパム手法taRgreyのおさらい</li>
+<li>taRgreyの現在の状況ログからスパムの現状を読み解く</li>
+</ul>
+</section>
+<section id="スパム対策についておさらい" class="slide level1">
+<h1>スパム対策についておさらい</h1>
+<ul>
+<li>2010年にNSEG #10で発表した資料を元におさらい</li>
+</ul>
+</section>
+<section id="年当時のスパム現状" class="slide level1">
+<h1>2010年当時のスパム現状</h1>
+<ul>
+<li>スパム率70%～80%程度という感じで年々増えていた</li>
+<li>97%前後がbotnetから出されたスパムだった</li>
+<li>日本発のスパムはOP25Bにより激減していた</li>
+</ul>
+</section>
+<section id="スパムはbotnetが主流だった" class="slide level1">
+<h1>スパムはbotnetが主流だった</h1>
+<ul>
+<li>スパムのうち97%前後がbotnetから出されていた</li>
+<li>ウイルス感染して遠隔操作可能にしたPCから出す</li>
+<li>大半は海外の動的IPから送信</li>
+<li>大量のメールを出すため再送やタイムアウト待ちしない</li>
+</ul>
+</section>
+<section id="普通のメール送信" class="slide level1">
+<h1>普通のメール送信</h1>
+<p><img src="normal_mail.png" height="500"></p>
+</section>
+<section id="botnetからのスパム送信" class="slide level1">
+<h1>botnetからのスパム送信</h1>
+<p><img src="botnet_spam.png" height="500"></p>
+</section>
+<section id="日本語スパムはbotnet利用せず" class="slide level1">
+<h1>日本語スパムはbotnet利用せず</h1>
+<ul>
+<li>中国、フィリピン、タイ等の半固定的IPから送信</li>
+<li>レンタルサーバや事務所に多数サーバを置く</li>
+<li>qmailやpostfixをそのまま利用</li>
+<li>またはWindows PCでスパム送信専用ツール利用</li>
+</ul>
+</section>
+<section id="実際にやってた人の記事" class="slide level1">
+<h1>実際にやってた人の記事</h1>
+<ul>
+<li><a href="https://www.nishinippon.co.jp/nnp/anatoku/article/394612/">迷惑メールを追う（上）【西日本新聞】</a></li>
+<li>2018/2の記事でそこから10年ほど前の話</li>
+<li>「出会い系サイト」誘導スパム</li>
+<li>中国、欧州、南米、アフリカなどにメールサーバー千台以上分散して配置</li>
+<li>１日あたり２億通送信</li>
+<li>１億人に送った場合、返信があるのは千人ほど</li>
+<li>返信に対してバイトが対応してポイントを購入させる</li>
+</ul>
+</section>
+<section id="スパム対策手法を大きく3種に分類" class="slide level1">
+<h1>スパム対策手法を大きく3種に分類</h1>
+<ul>
+<li>メール本文を解析するコンテンツフィルタ</li>
+<li>送信者の「クセ」を利用したSMTPセッションフィルタ</li>
+<li>ネットワークでスパム送信自体を制限</li>
+</ul>
+</section>
+<section id="メール本文を解析する-コンテンツフィルタ" class="slide level1">
+<h1>メール本文を解析する<br>コンテンツフィルタ</h1>
+<ul>
+<li>主に本文の内容を解析して判定</li>
+<li>主な例：ベイジアンフィルタ</li>
+<li>キーワードとその「スパムらしさ」を機械学習する<br />
+「バイアグラ」が含まれてるなら99%スパム<br />
+「出会い」「お金」が含まれてるなら95%スパム<br />
+などを積算して判定</li>
+</ul>
+</section>
+<section id="smtpセッションフィルタ" class="slide level1">
+<h1>SMTPセッションフィルタ</h1>
+<ul>
+<li>SMTPセッション時の相手の「クセ」で判定</li>
+<li>S25R<br />
+「動的IPっぽい」逆引き名を拒否<br />
+例:evrtwa1-ar3-4-65-157-048.evrtwa1.dsl-verizon.net</li>
+<li>greylisting 一時拒否して再送してきたら受け取る<br />
+スパムは到達性は求めないからわざわざ再送しない</li>
+<li>tarpitting<br />
+SMTPセッションの返答を何10秒か待たせる<br />
+スパムは大量に送りたいので遅い相手は切る</li>
+</ul>
+</section>
+<section id="greylistingによるスパムフィルタ" class="slide level1">
+<h1>greylistingによるスパムフィルタ</h1>
+<p><img src="greylisting.png" height="400"></p>
+</section>
+<section id="tarpittingによるスパムフィルタ" class="slide level1">
+<h1>tarpittingによるスパムフィルタ</h1>
+<p><img src="tarpitting.png" height="400"></p>
+</section>
+<section id="ネットワークで送信制限" class="slide level1">
+<h1>ネットワークで送信制限</h1>
+<ul>
+<li>スパムを受け取らないのではなく出させない対策</li>
+<li>OP25B (Outbound Port 25 Blocking)</li>
+<li>ISPが自ネットワークから外向けSMTP接続を止める</li>
+<li>日本では2005～2007年くらいに掛けて一気に普及</li>
+<li>これで日本発のスパムが劇的に減った</li>
+</ul>
+</section>
+<section id="botnetからのスパム送信-1" class="slide level1">
+<h1>botnetからのスパム送信</h1>
+<p><img src="botnet_spam.png" height="500"></p>
+</section>
+<section id="op25bでの送信制限" class="slide level1">
+<h1>OP25Bでの送信制限</h1>
+<p><img src="OP25B_spam.png" height="500"></p>
+</section>
+<section id="targrey" class="slide level1">
+<h1>taRgrey</h1>
+<ul>
+<li>taRgreyはSMTPセッション情報でのフィルタを<br>複数組み合わせたフィルタ</li>
+<li>S25Rで動的IPっぽいものだけ</li>
+<li>返答の遅延を掛ける(120秒とか)</li>
+<li>その間に勝手にあきらめるのを待つ</li>
+<li>同一IPから再送されてきたら遅延掛けずに通す</li>
+<li>85%弱のスパムを排除していた</li>
+</ul>
+</section>
+<section id="targreyフローチャート" class="slide level1">
+<h1>taRgreyフローチャート</h1>
+<p><img src="taRgrey.png" height="400"></p>
+</section>
+<section id="targreyの目的" class="slide level1">
+<h1>taRgreyの目的</h1>
+<ul>
+<li>taRgreyは誤検出や遅延がなるべく少なく</li>
+<li>大部分のスパムを削減することが目的</li>
+<li>taRgreyだけでスパムを削除することは求めない</li>
+</ul>
+</section>
+<section id="年当時の状況" class="slide level1">
+<h1>2010年当時の状況</h1>
+<table>
+<thead>
+<tr class="header">
+<th></th>
+<th>率</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>スパム率</td>
+<td>69%</td>
+</tr>
+<tr class="even">
+<td>S25Rのスパムマッチ率</td>
+<td>93%</td>
+</tr>
+<tr class="odd">
+<td>tarpitingでの駆除率</td>
+<td>91%</td>
+</tr>
+<tr class="even">
+<td>taRgreyでの駆除率</td>
+<td>85%</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="ここから今の話" class="slide level1">
+<h1>ここから今の話</h1>
+<ul>
+<li>ここ6年くらいのメールやスパムの状況</li>
+</ul>
+</section>
+<section id="メール総数とスパム数" class="slide level1">
+<h1>メール総数とスパム数</h1>
+<table style="font-size: 50%">
+<thead>
+<tr class="header">
+<th>アカウントあたり</th>
+<th>2014年まで</th>
+<th>2018年現在</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>メール数</td>
+<td>2,500通/月ほど</td>
+<td>1,000通/月弱</td>
+</tr>
+<tr class="even">
+<td>スパム数</td>
+<td>2,000通/月ほど</td>
+<td>500通/月ほど</td>
+</tr>
+</tbody>
+</table>
+<p><img src="mail_spam.png" height="500"></p>
+</section>
+<section id="スパム率" class="slide level1">
+<h1>スパム率</h1>
+<ul>
+<li>2014年くらいまでずっと75%くらいだった</li>
+<li>その後徐々に低下し2018年には50%を切る</li>
+</ul>
+<p><img src="spam_rate.png" height="500"></p>
+</section>
+<section id="メール総数とハム数" class="slide level1">
+<h1>メール総数とハム数</h1>
+<ul>
+<li>正常なメール（ハム）は意外に減っていない</li>
+</ul>
+<p><img src="mail_ham.png" height="500"></p>
+</section>
+<section id="スパムは確実に減っている" class="slide level1">
+<h1>スパムは確実に減っている</h1>
+<ul>
+<li>スパムはここ3,4年で大きく減っている</li>
+<li>意外に普通のメール流量は減っていない</li>
+<li>どんなスパムが減ったのか？</li>
+</ul>
+</section>
+<section id="怪しい接続元メール数大幅減" class="slide level1">
+<h1>怪しい接続元メール数大幅減</h1>
+<ul>
+<li>S25Rに掛かる接続元は70%減程度に激減</li>
+<li>tarpittingで切断されたメール数も合わせて減少</li>
+</ul>
+<p><img src="warn_lost.png" height="500"></p>
+</section>
+<section id="tarpittingでの切断率大幅低下" class="slide level1">
+<h1>tarpittingでの切断率大幅低下</h1>
+<ul>
+<li>2014年くらいまでずっと80%程度だった</li>
+<li>その後2018年には30%にまで急激に低下</li>
+</ul>
+<p><img src="lost_rate.png" height="500"></p>
+</section>
+<section id="フィルタ種での比較" class="slide level1">
+<h1>フィルタ種での比較</h1>
+<ul>
+<li>コンテンツフィルタは30%減程</li>
+<li>tarpittingは85％も激減</li>
+</ul>
+<p><img src="spamfilter_type.png" height="500"></p>
+</section>
+<section id="tarpittingの1次フィルタの効果" class="slide level1">
+<h1>tarpittingの1次フィルタの効果</h1>
+<ul>
+<li>2015年頃まではずっと70%～80%維持</li>
+<li>以降急激に低下しついに30%程度に</li>
+</ul>
+<p><img src="spamfilter_type_rate.png" height="500"></p>
+</section>
+<section id="botnetからの送信が減った" class="slide level1">
+<h1>botnetからの送信が減った</h1>
+<ul>
+<li>S25Rで引っ掛かるスパムが激減</li>
+<li>tarpittingの効果があるスパムも激減</li>
+<li>tarpittingを抜ける「通常のメールサーバ」からは微減</li>
+<li>つまりbotnetからのスパム送信が大幅に減った</li>
+</ul>
+</section>
+<section id="submissionスパム" class="slide level1">
+<h1>submissionスパム</h1>
+<ul>
+<li>botnetから送信認証させてスパム送信</li>
+<li>スパム側のOP25B対策</li>
+<li>ウイルス感染等で取得したアカウントを利用</li>
+<li>2012年頃から</li>
+</ul>
+</section>
+<section id="op25bでの送信制限-1" class="slide level1">
+<h1>OP25Bでの送信制限</h1>
+<p><img src="OP25B_spam.png" height="500"></p>
+</section>
+<section id="submissionスパム-1" class="slide level1">
+<h1>submissionスパム</h1>
+<p><img src="submission_spam.png" height="500"></p>
+</section>
+<section id="submissionポートへの攻撃" class="slide level1">
+<h1>submissionポートへの攻撃</h1>
+<ul>
+<li>submissionポートへの認証アクセス急増</li>
+<li>アカウントクラックを狙ったもの</li>
+</ul>
+<p><img src="auth_lost.png" height="400"></p>
+</section>
+<section id="submissionスパム-実はこっそり送ってる" class="slide level1">
+<h1>submissionスパム<br>実は「こっそり」送ってる</h1>
+<ul>
+<li>クラックされたアカウントのログを解析</li>
+<li>せっかく盗ったアカウントを見つからないよう<br>ちょっとづつこっそり送る</li>
+<li>無茶な送り方をする「顧客」がいたときだけ見つかる</li>
+</ul>
+</section>
+<section id="貴重なbotnetの資源を-スパムに割かなくなった" class="slide level1">
+<h1>貴重なbotnetの資源を<br>スパムに割かなくなった</h1>
+<ul>
+<li>メールより効果の高いSNSなどを狙う</li>
+<li>低効率のスパムではなく<br>フィッシングなどより高効率なものに使う</li>
+</ul>
+</section>
+<section id="targrey-は-オ-ワ-コ-ン" class="slide level1">
+<h1>taRgrey は オ ワ コ ン</h1>
+</section>
+<section id="滅-せ-ぬ-も-の-の-あ-る-べ-き-か" class="slide level1">
+<h1>滅 せ ぬ も の の あ る べ き か</h1>
+</section>
+<section id="smtpセッションフィルタの終焉" class="slide level1">
+<h1>SMTPセッションフィルタの終焉</h1>
+<ul>
+<li>greylistingなども同じ</li>
+<li>botnetから送られなければ不要</li>
+<li>というかスパムがなければスパムフィルタは不要</li>
+<li>だから喜ぶべき話</li>
+</ul>
+</section>
+<section id="スパム対策側は勝ったのか" class="slide level1">
+<h1>スパム対策側は勝ったのか</h1>
+<ul>
+<li>スパム対策が進みスパムの効果が少なくなった</li>
+<li>OP25B普及でスパムを出すことが難しくなった</li>
+<li>メール自体の価値が相対的に低下してしまった<br />
+(暗号化、詐称、添付ファイル、既読確認、など)</li>
+<li>メールの価値低下はスパムの影響も大きい</li>
+<li>スパマーは他の「狩場」へ</li>
+</ul>
+</section>
+<section id="まとめ" class="slide level1">
+<h1>まとめ</h1>
+<ul>
+<li>taRgreyはもう導入する意味がない</li>
+<li>メールはまだ生きてるが死につつある</li>
+<li>しかしスパマーも去った</li>
+</ul>
+</section>
+    </div>
+  </div>
+
+  <script src="reveal.js/lib/js/head.min.js"></script>
+  <script src="reveal.js/js/reveal.js"></script>
+
+  <script>
+
+      // Full list of configuration options available at:
+      // https://github.com/hakimel/reveal.js#configuration
+      Reveal.initialize({
+
+        // Optional reveal.js plugins
+        dependencies: [
+          { src: 'reveal.js/lib/js/classList.js', condition: function() { return !document.body.classList; } },
+          { src: 'reveal.js/plugin/zoom-js/zoom.js', async: true },
+              { src: 'reveal.js/plugin/notes/notes.js', async: true }
+        ]
+      });
+    </script>
+    </body>
+</html>
